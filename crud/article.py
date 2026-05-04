@@ -1,0 +1,55 @@
+import math
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from models.article import Article
+from schemas.article import ArticleCreate, ArticleUpdate
+
+
+async def get_article_by_id(db: AsyncSession, article_id: int) -> Article | None:
+    query = select(Article).where(Article.id == article_id)
+    result = await db.execute(query)
+    return result.scalars().one_or_none()
+
+
+async def get_articles(
+    db: AsyncSession,
+    page: int = 1,
+    page_size: int = 10
+) -> tuple[list[Article], int]:
+    offset = (page - 1) * page_size
+    
+    count_query = select(func.count(Article.id))
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+    
+    query = select(Article).order_by(Article.created_at.desc()).offset(offset).limit(page_size)
+    result = await db.execute(query)
+    articles = list(result.scalars().all())
+    
+    return articles, total
+
+
+async def create_article(db: AsyncSession, article_data: ArticleCreate) -> Article:
+    article = Article(**article_data.model_dump())
+    db.add(article)
+    await db.commit()
+    await db.refresh(article)
+    return article
+
+
+async def update_article(
+    db: AsyncSession,
+    article: Article,
+    article_data: ArticleUpdate
+) -> Article:
+    update_data = article_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(article, field, value)
+    await db.commit()
+    await db.refresh(article)
+    return article
+
+
+async def delete_article(db: AsyncSession, article: Article) -> None:
+    await db.delete(article)
+    await db.commit()
