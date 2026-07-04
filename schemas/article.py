@@ -20,6 +20,7 @@ class ArticleUpdate(BaseModel):
 class ArticleResponse(ArticleBase):
     id: int
     user_id: Optional[int]
+    user_name: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

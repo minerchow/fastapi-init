@@ -1,14 +1,15 @@
 import math
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import joinedload
 from models.article import Article
 from schemas.article import ArticleCreate, ArticleUpdate
 
 
 async def get_article_by_id(db: AsyncSession, article_id: int) -> Article | None:
-    query = select(Article).where(Article.id == article_id)
+    query = select(Article).options(joinedload(Article.user)).where(Article.id == article_id)
     result = await db.execute(query)
-    return result.scalars().one_or_none()
+    return result.scalars().unique().one_or_none()
 
 
 async def get_articles(
@@ -22,9 +23,9 @@ async def get_articles(
     total_result = await db.execute(count_query)
     total = total_result.scalar()
     
-    query = select(Article).order_by(Article.created_at.desc()).offset(offset).limit(page_size)
+    query = select(Article).options(joinedload(Article.user)).order_by(Article.created_at.desc()).offset(offset).limit(page_size)
     result = await db.execute(query)
-    articles = list(result.scalars().all())
+    articles = list(result.scalars().unique().all())
     
     return articles, total
 

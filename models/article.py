@@ -15,6 +15,10 @@ class Article(Base):
     user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey('user.id'), nullable=True)
     
     user: Mapped[Optional["User"]] = relationship("User", backref="articles")
+    
+    @property
+    def user_name(self) -> Optional[str]:
+        return self.user.username if self.user else None
 
     def __repr__(self):
         return f"<Article(id={self.id}, title='{self.title}', user_id={self.user_id})>"

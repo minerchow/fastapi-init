@@ -2,9 +2,12 @@ import os
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession, create_async_engine
 
-load_dotenv()
+# 根据 APP_ENV 加载对应的 .env 文件
+app_env = os.getenv("APP_ENV", "development")
+env_file = f".env.{app_env}" if app_env != "development" else ".env"
+load_dotenv(env_file)
 
-ENV = os.getenv("ENV", "development")
+ENV = os.getenv("ENV", app_env)
 
 DB_CONFIG = {
     "development": {
