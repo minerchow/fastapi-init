@@ -30,8 +30,8 @@ async def get_articles(
     return articles, total
 
 
-async def create_article(db: AsyncSession, article_data: ArticleCreate) -> Article:
-    article = Article(**article_data.model_dump())
+async def create_article(db: AsyncSession, article_data: ArticleCreate, user_id: int) -> Article:
+    article = Article(**article_data.model_dump(), user_id=user_id)
     db.add(article)
     await db.commit()
     await db.refresh(article)

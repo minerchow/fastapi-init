@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config.db_conf import get_db
 from models.user import User
 from schemas.user import UserCreate, UserResponse, UserLogin, LoginResponse, TokenData, RefreshTokenRequest, UserRoleUpdate
-from crud.user import get_user_by_username, create_user, get_user_by_id, update_user_role
+from crud.user import get_user_by_username, create_user, get_user_by_id, update_user_role, soft_delete_user
 from utils.response import success_response
 from utils.auth import get_current_user, create_tokens, verify_refresh_token
 from utils.security import verify_password
@@ -95,3 +95,20 @@ async def change_user_role(
         message="修改用户角色成功",
         data=UserResponse.model_validate(updated_user)
     )
+
+
+@router.delete("/{user_id}")
+async def delete_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(allow_admin)
+):
+    user = await get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
+
+    await soft_delete_user(db, user)
+    return success_response(message="删除用户成功")

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from enum import Enum
 
-from sqlalchemy import Integer, String, DateTime
+from sqlalchemy import Integer, String, DateTime, Boolean
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -30,6 +30,7 @@ class User(Base):
     nickname: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     avatar: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(String(20), default=UserRole.USER.value, nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}', role='{self.role}')>"

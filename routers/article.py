@@ -59,12 +59,7 @@ async def create_new_article(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(allow_author)
 ):
-    article_dict = article_data.model_dump()
-    article_dict['user_id'] = user.id
-    article = Article(**article_dict)
-    db.add(article)
-    await db.commit()
-    await db.refresh(article)
+    article = await create_article(db, article_data, user.id)
     return success_response(
         message="创建文章成功",
         data=ArticleResponse.model_validate(article)
