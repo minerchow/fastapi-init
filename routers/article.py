@@ -106,5 +106,8 @@ async def delete_existing_article(
             detail="文章不存在"
         )
     
-    await delete_article(db, article)
-    return success_response(message="删除文章成功")
+    deleted_article = await delete_article(db, article)
+    return success_response(
+        message="删除文章成功",
+        data=ArticleResponse.model_validate(deleted_article)
+    )

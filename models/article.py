@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import Integer, String, Text
+from sqlalchemy import Boolean, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.user import Base
@@ -13,6 +13,7 @@ class Article(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     
     user: Mapped[Optional["User"]] = relationship("User", foreign_keys="Article.user_id", primaryjoin="Article.user_id == User.id", backref="articles")
     

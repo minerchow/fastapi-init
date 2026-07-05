@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
+from models.article import Article
 from models.user import User
 from schemas.user import UserCreate
 from utils.security import get_hash_password
@@ -35,6 +36,11 @@ async def update_user_role(db: AsyncSession, user: User, role: str) -> User:
 
 async def soft_delete_user(db: AsyncSession, user: User) -> User:
     user.is_deleted = True
+    await db.execute(
+        update(Article)
+        .where(Article.user_id == user.id, Article.is_deleted == False)
+        .values(is_deleted=True)
+    )
     await db.commit()
     await db.refresh(user)
     return user
