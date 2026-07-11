@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 
-from models.user import UserRole
+from utils.enums import UserRole
 
 
 class BaseResponse(BaseModel):

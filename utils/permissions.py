@@ -1,7 +1,8 @@
 from typing import List, Optional
 from fastapi import Depends, HTTPException, status
 
-from models.user import User, UserRole
+from models.user import User
+from utils.enums import UserRole
 from utils.auth import get_current_user
 
 

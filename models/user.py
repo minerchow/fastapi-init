@@ -1,15 +1,10 @@
 from datetime import datetime
 from typing import Optional
-from enum import Enum
 
 from sqlalchemy import Integer, String, DateTime, Boolean
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-
-class UserRole(str, Enum):
-    USER = "user"
-    AUTHOR = "author"
-    ADMIN = "admin"
+from utils.enums import UserRole
 
 
 class Base(DeclarativeBase):
