@@ -3,7 +3,7 @@ from typing import Optional
 from sqlalchemy import Boolean, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from models.user import Base
+from models.base import Base
 
 
 class Article(Base):

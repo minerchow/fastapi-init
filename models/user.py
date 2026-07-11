@@ -1,19 +1,11 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Integer, String, DateTime, Boolean
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import Integer, String, Boolean
+from sqlalchemy.orm import Mapped, mapped_column
 
+from models.base import Base
 from utils.enums import UserRole
-
-
-class Base(DeclarativeBase):
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=datetime.now,
-        onupdate=datetime.now
-    )
 
 
 class User(Base):
