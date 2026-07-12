@@ -9,7 +9,6 @@ dependencies = [
     "alembic>=1.18.5",
     "bcrypt<4.1.0",
     "fastapi[standard]>=0.129.2",
-    "jwt>=1.4.0",
     "passlib[bcrypt]>=1.7.4",
     "pyjwt>=2.12.1",
     "redis>=7.3.0",
