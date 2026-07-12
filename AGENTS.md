@@ -23,7 +23,7 @@
 
 ```
 fastapi-init/
-├── main.py                  # App entry: create FastAPI, register middleware & routers
+├── main.py                  # App entry: create FastAPI with lifespan, register middleware & routers
 ├── pyproject.toml           # Dependencies & project metadata
 ├── alembic/                 # DB migrations (Alembic)
 │   └── versions/
@@ -33,7 +33,7 @@ fastapi-init/
 │   └── cache_config.py      #   Redis client & helpers
 ├── models/                  # SQLAlchemy ORM models (layer 1)
 │   ├── __init__.py          #   Re-exports all models + Base
-│   ├── base.py              #   Base (DeclarativeBase)
+│   ├── base.py              #   Base (DeclarativeBase, UTC timestamps via _utcnow())
 │   ├── user.py              #   User model
 │   └── article.py           #   Article model
 ├── schemas/                 # Pydantic request/response schemas (layer 2)
@@ -54,7 +54,7 @@ fastapi-init/
     ├── security.py          #   bcrypt hash / verify
     ├── permissions.py       #   RoleChecker (allow_user / allow_author / allow_admin)
     ├── response.py          #   success_response() / error_response() helpers
-    ├── exception.py         #   Exception handler implementations
+    ├── exception.py         #   Exception handler implementations (DEBUG_MODE from ENV)
     └── exception_handlers.py#   register_exception_handlers(app)
 ```
 
@@ -183,13 +183,17 @@ class Article(Base):
     @property
     def user_name(self) -> Optional[str]:
         return self.user.username if self.user else None
+
+    def __repr__(self):
+        return f"<Article(id={self.id}, title='{self.title}', user_id={self.user_id})>"
 ```
 
 **Key conventions:**
-- Inherit from `Base` (declared in `models/base.py` — provides `created_at`, `updated_at`)
+- Inherit from `Base` (declared in `models/base.py` — provides `created_at`, `updated_at` using UTC via `_utcnow()`)
 - Soft-delete via `is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)`
 - Foreign key fields use `Integer` without FK constraint at DB level (historical reason — can add FK if needed)
 - Relationships and `@property` for computed fields
+- `__repr__` for debugging
 
 ### 6.2 Schemas (`schemas/article.py`)
 
@@ -235,12 +239,10 @@ class ArticleListResponse(BaseModel):
 ### 6.3 CRUD (`crud/article.py`)
 
 ```python
-from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
 from models.article import Article
-from models.user import User
 from schemas.article import ArticleCreate, ArticleUpdate
 
 async def get_article_by_id(db: AsyncSession, article_id: int) -> Article | None:
@@ -270,18 +272,9 @@ async def get_articles(
     return articles, total
 
 async def create_article(db: AsyncSession, article_data: ArticleCreate, user_id: int) -> Article:
-    # 代码层校验 user 存在（替代 FK 约束）
-    user_query = select(User).where(User.id == user_id, User.is_deleted == False)
-    user_result = await db.execute(user_query)
-    if not user_result.scalars().one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="用户不存在"
-        )
-
     article = Article(**article_data.model_dump(), user_id=user_id)
     db.add(article)
-    await db.commit()
+    await db.flush()
     await db.refresh(article)
     return article
 
@@ -291,13 +284,13 @@ async def update_article(
     update_data = article_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(article, field, value)
-    await db.commit()
+    await db.flush()
     await db.refresh(article)
     return article
 
 async def delete_article(db: AsyncSession, article: Article) -> Article:
     article.is_deleted = True
-    await db.commit()
+    await db.flush()
     await db.refresh(article)
     return article
 ```
@@ -307,10 +300,11 @@ async def delete_article(db: AsyncSession, article: Article) -> Article:
 - **Soft delete**: never hard-delete — set `is_deleted = True`
 - **Paginated list**: return `tuple[list[Model], int]` (items + total), compute offset manually
 - **Get by ID**: `result.scalars().unique().one_or_none()`
-- **Create**: `db.add()` → `commit()` → `refresh()` — accept `**model_dump()` for scalar fields
-- **Update**: `model_dump(exclude_unset=True)` → iter `setattr()` → `commit()` → `refresh()` — accept the ORM object (not ID), so ownership check is caller's responsibility
-- **Delete**: set `is_deleted = True` → `commit()` → `refresh()`
+- **Create**: `db.add()` → `flush()` → `refresh()` — accept `**model_dump()` for scalar fields; user-existence validation is done in the router layer, not CRUD
+- **Update**: `model_dump(exclude_unset=True)` → iter `setattr()` → `flush()` → `refresh()` — accept the ORM object (not ID), so ownership check is caller's responsibility
+- **Delete**: set `is_deleted = True` → `flush()` → `refresh()`
 - Use `joinedload()` for eager-loading relationships when needed
+- Use `flush()` instead of `commit()` — `get_db` dependency auto-commits on yield success
 
 ### 6.4 Router (`routers/article.py`)
 
@@ -323,6 +317,7 @@ from config.db_conf import get_db
 from models.user import User
 from schemas.article import ArticleCreate, ArticleUpdate, ArticleResponse, ArticleListResponse
 from crud.article import get_article_by_id, get_articles, create_article, update_article, delete_article
+from crud.user import get_user_by_id
 from utils.response import success_response
 from utils.permissions import allow_user, allow_author, allow_admin
 
@@ -364,6 +359,9 @@ async def create_new_article(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(allow_author)
 ):
+    db_user = await get_user_by_id(db, user.id)
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
     article = await create_article(db, article_data, user.id)
     return success_response(message="创建文章成功", data=ArticleResponse.model_validate(article))
 
@@ -404,6 +402,7 @@ async def delete_existing_article(
 - `ArticleResponse.model_validate(obj)` for serialization
 - `ArticleListResponse(…).model_dump()` for paginated list responses
 - Ownership check: `article.user_id != user.id` before update
+- User-existence check in router (not CRUD) before create
 - Role-based access via `allow_user` / `allow_author` / `allow_admin`
 
 ---
@@ -445,6 +444,8 @@ Step 6: Register router         ← In routers/__init__.py + main.py
 - Use `model_config = ConfigDict(from_attributes=True)` on `*Response` schemas
 - Use `*ListResponse` wrapper for list endpoints
 - Role-check all endpoints appropriately
+- User-existence validation in router layer, not CRUD
+- Use `flush()` instead of `commit()` in CRUD — `get_db` dependency auto-commits on yield success
 - Chinese `description=` in Field is acceptable but optional
 
 ---
@@ -463,6 +464,17 @@ async def get_db():
             raise
         finally:
             await session.close()
+```
+
+**Application lifespan** (`main.py`) — closes DB engine and Redis on shutdown:
+```python
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    from config.db_conf import async_engine
+    from config.cache_config import redis_client
+    await async_engine.dispose()
+    await redis_client.aclose()
 ```
 
 **Alembic migration:**
