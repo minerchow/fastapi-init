@@ -1,9 +1,13 @@
-from typing import List, Optional
+from __future__ import annotations
+
+from typing import List, Optional, TYPE_CHECKING
 from fastapi import Depends, HTTPException, status
 
-from models.user import User
 from utils.enums import UserRole
 from utils.auth import get_current_user
+
+if TYPE_CHECKING:
+    from models.user import User
 
 
 class RoleChecker:
