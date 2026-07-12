@@ -33,7 +33,8 @@ fastapi-init/
 │   └── cache_config.py      #   Redis client & helpers
 ├── models/                  # SQLAlchemy ORM models (layer 1)
 │   ├── __init__.py          #   Re-exports all models + Base
-│   ├── user.py              #   User model + Base (DeclarativeBase)
+│   ├── base.py              #   Base (DeclarativeBase)
+│   ├── user.py              #   User model
 │   └── article.py           #   Article model
 ├── schemas/                 # Pydantic request/response schemas (layer 2)
 │   ├── __init__.py          #   Re-exports schemas (optional)
@@ -86,7 +87,7 @@ Every feature module follows **exactly 4 layers**. Data flows: **Router → CRUD
 
 ## 4. Role & Permission System
 
-Defined in `models/user.py` as an enum:
+Defined in `utils/enums.py` as an enum:
 
 ```python
 class UserRole(str, Enum):
@@ -161,7 +162,7 @@ This is the **reference implementation** for all new modules.
 from typing import Optional
 from sqlalchemy import Boolean, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from models.user import Base
+from models.base import Base
 
 class Article(Base):
     __tablename__ = 'article'
@@ -185,7 +186,7 @@ class Article(Base):
 ```
 
 **Key conventions:**
-- Inherit from `Base` (declared in `models/user.py` — provides `created_at`, `updated_at`)
+- Inherit from `Base` (declared in `models/base.py` — provides `created_at`, `updated_at`)
 - Soft-delete via `is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)`
 - Foreign key fields use `Integer` without FK constraint at DB level (historical reason — can add FK if needed)
 - Relationships and `@property` for computed fields
@@ -234,11 +235,12 @@ class ArticleListResponse(BaseModel):
 ### 6.3 CRUD (`crud/article.py`)
 
 ```python
-import math
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
 from models.article import Article
+from models.user import User
 from schemas.article import ArticleCreate, ArticleUpdate
 
 async def get_article_by_id(db: AsyncSession, article_id: int) -> Article | None:
@@ -268,6 +270,15 @@ async def get_articles(
     return articles, total
 
 async def create_article(db: AsyncSession, article_data: ArticleCreate, user_id: int) -> Article:
+    # 代码层校验 user 存在（替代 FK 约束）
+    user_query = select(User).where(User.id == user_id, User.is_deleted == False)
+    user_result = await db.execute(user_query)
+    if not user_result.scalars().one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
+
     article = Article(**article_data.model_dump(), user_id=user_id)
     db.add(article)
     await db.commit()
