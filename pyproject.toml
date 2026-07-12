@@ -11,6 +11,7 @@ dependencies = [
     "fastapi[standard]>=0.129.2",
     "passlib[bcrypt]>=1.7.4",
     "pyjwt>=2.12.1",
+    "python-dotenv>=1.1.0",
     "redis>=7.3.0",
     "sqlalchemy[asyncio]>=2.0.46",
 ]

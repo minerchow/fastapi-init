@@ -1,3 +1,4 @@
+import os
 import traceback
 
 from fastapi import HTTPException, Request
@@ -5,7 +6,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette import status
 
-DEBUG_MODE = True
+DEBUG_MODE = os.getenv("ENV", "development") == "development"
 
 
 async def http_exception_handler(request: Request, exc: HTTPException):

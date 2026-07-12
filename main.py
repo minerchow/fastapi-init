@@ -1,13 +1,26 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from routers import user_router, health_router, article_router
 from utils.exception_handlers import register_exception_handlers
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    from config.db_conf import async_engine
+    from config.cache_config import redis_client
+    await async_engine.dispose()
+    await redis_client.aclose()
+
+
 app = FastAPI(
     title="FastAPI Scaffold",
     description="A FastAPI scaffold project with SQLAlchemy, Redis, and more",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan
 )
 
 register_exception_handlers(app)
