@@ -7,6 +7,7 @@ from models.user import User
 from models.article import Article
 from schemas.article import ArticleCreate, ArticleUpdate, ArticleResponse, ArticleListResponse
 from crud.article import get_article_by_id, get_articles, create_article, update_article, delete_article
+from crud.user import get_user_by_id
 from utils.response import success_response
 from utils.permissions import allow_user, allow_author, allow_admin
 
@@ -59,6 +60,12 @@ async def create_new_article(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(allow_author)
 ):
+    db_user = await get_user_by_id(db, user.id)
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
     article = await create_article(db, article_data, user.id)
     return success_response(
         message="创建文章成功",

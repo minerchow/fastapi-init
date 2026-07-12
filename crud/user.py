@@ -22,14 +22,14 @@ async def create_user(db: AsyncSession, user_data: UserCreate) -> User:
     hashed_password = get_hash_password(user_data.password)
     user = User(username=user_data.username, password=hashed_password)
     db.add(user)
-    await db.commit()
+    await db.flush()
     await db.refresh(user)
     return user
 
 
 async def update_user_role(db: AsyncSession, user: User, role: str) -> User:
     user.role = role
-    await db.commit()
+    await db.flush()
     await db.refresh(user)
     return user
 
@@ -41,6 +41,6 @@ async def soft_delete_user(db: AsyncSession, user: User) -> User:
         .where(Article.user_id == user.id, Article.is_deleted == False)
         .values(is_deleted=True)
     )
-    await db.commit()
+    await db.flush()
     await db.refresh(user)
     return user
