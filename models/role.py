@@ -32,6 +32,8 @@ class Role(Base):
     permissions: Mapped[List["Permission"]] = relationship(
         "Permission",
         secondary=role_permission,
+        primaryjoin="Role.id == role_permission.c.role_id",
+        secondaryjoin="Permission.id == role_permission.c.permission_id",
         backref="roles",
         lazy="selectin",
     )

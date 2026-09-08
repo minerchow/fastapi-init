@@ -22,6 +22,8 @@ class User(Base):
     roles: Mapped[List["Role"]] = relationship(
         "Role",
         secondary=user_role,
+        primaryjoin="User.id == user_role.c.user_id",
+        secondaryjoin="Role.id == user_role.c.role_id",
         backref="users",
         lazy="selectin",
     )
