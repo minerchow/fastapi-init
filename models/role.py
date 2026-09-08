@@ -1,5 +1,5 @@
 from typing import Optional, List
-from sqlalchemy import Integer, String, Table, Column, ForeignKey
+from sqlalchemy import Integer, String, Table, Column
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from models.base import Base
 
@@ -7,16 +7,16 @@ from models.base import Base
 role_permission = Table(
     "role_permission",
     Base.metadata,
-    Column("role_id", Integer, ForeignKey("role.id"), primary_key=True),
-    Column("permission_id", Integer, ForeignKey("permission.id"), primary_key=True),
+    Column("role_id", Integer, primary_key=True),
+    Column("permission_id", Integer, primary_key=True),
 )
 
 # 用户-角色 关联表
 user_role = Table(
     "user_role",
     Base.metadata,
-    Column("user_id", Integer, ForeignKey("user.id"), primary_key=True),
-    Column("role_id", Integer, ForeignKey("role.id"), primary_key=True),
+    Column("user_id", Integer, primary_key=True),
+    Column("role_id", Integer, primary_key=True),
 )
 
 

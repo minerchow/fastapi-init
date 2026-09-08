@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from sqlalchemy.orm import joinedload
+from fastapi import HTTPException
 from models.article import Article
 from models.user import User
 from models.role import Role
@@ -40,6 +41,13 @@ async def update_user_roles(db: AsyncSession, user: User, role_ids: list[int]) -
         query = select(Role).where(Role.id.in_(role_ids), Role.is_deleted == False)
         result = await db.execute(query)
         roles = list(result.scalars().all())
+        if len(roles) != len(role_ids):
+            found_ids = {r.id for r in roles}
+            missing = [rid for rid in role_ids if rid not in found_ids]
+            raise HTTPException(
+                status_code=400,
+                detail=f"以下角色不存在: {missing}"
+            )
     user.roles = roles
     await db.flush()
     await db.refresh(user)

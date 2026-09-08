@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
+from fastapi import HTTPException
 from models.role import Role, role_permission
 from models.permission import Permission
 from schemas.role import RoleCreate, RoleUpdate
@@ -58,6 +59,10 @@ async def create_role(db: AsyncSession, role_data: RoleCreate) -> Role:
     # 关联权限
     if role_data.permission_ids:
         permissions = await get_permissions_by_ids(db, role_data.permission_ids)
+        if len(permissions) != len(role_data.permission_ids):
+            found_ids = {p.id for p in permissions}
+            missing = [pid for pid in role_data.permission_ids if pid not in found_ids]
+            raise HTTPException(status_code=400, detail=f"以下权限不存在: {missing}")
         role.permissions = permissions
         await db.flush()
 
@@ -74,6 +79,10 @@ async def update_role(db: AsyncSession, role: Role, role_data: RoleUpdate) -> Ro
     # 更新权限关联
     if role_data.permission_ids is not None:
         permissions = await get_permissions_by_ids(db, role_data.permission_ids)
+        if len(permissions) != len(role_data.permission_ids):
+            found_ids = {p.id for p in permissions}
+            missing = [pid for pid in role_data.permission_ids if pid not in found_ids]
+            raise HTTPException(status_code=400, detail=f"以下权限不存在: {missing}")
         role.permissions = permissions
 
     await db.flush()
