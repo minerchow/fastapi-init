@@ -1,21 +1,27 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
+from sqlalchemy.orm import joinedload
 from models.article import Article
 from models.user import User
+from models.role import Role
 from schemas.user import UserCreate
 from utils.security import get_hash_password
 
 
 async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
-    query = select(User).where(User.username == username, User.is_deleted == False)
+    query = select(User).options(joinedload(User.roles)).where(
+        User.username == username, User.is_deleted == False
+    )
     result = await db.execute(query)
-    return result.scalars().one_or_none()
+    return result.scalars().unique().one_or_none()
 
 
 async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
-    query = select(User).where(User.id == user_id, User.is_deleted == False)
+    query = select(User).options(joinedload(User.roles)).where(
+        User.id == user_id, User.is_deleted == False
+    )
     result = await db.execute(query)
-    return result.scalars().one_or_none()
+    return result.scalars().unique().one_or_none()
 
 
 async def create_user(db: AsyncSession, user_data: UserCreate) -> User:
@@ -27,8 +33,14 @@ async def create_user(db: AsyncSession, user_data: UserCreate) -> User:
     return user
 
 
-async def update_user_role(db: AsyncSession, user: User, role: str) -> User:
-    user.role = role
+async def update_user_roles(db: AsyncSession, user: User, role_ids: list[int]) -> User:
+    """更新用户的角色关联"""
+    roles = []
+    if role_ids:
+        query = select(Role).where(Role.id.in_(role_ids), Role.is_deleted == False)
+        result = await db.execute(query)
+        roles = list(result.scalars().all())
+    user.roles = roles
     await db.flush()
     await db.refresh(user)
     return user

@@ -52,7 +52,7 @@ fastapi-init/
 └── utils/                   # Shared utilities
     ├── auth.py              #   JWT creation & current-user dependency
     ├── security.py          #   bcrypt hash / verify
-    ├── permissions.py       #   RoleChecker (allow_user / allow_author / allow_admin)
+    ├── permissions.py       #   RBAC 依赖注入 (require_role / require_any_role / require_permission)
     ├── response.py          #   success_response() / error_response() helpers
     ├── exception.py         #   Exception handler implementations (DEBUG_MODE from ENV)
     └── exception_handlers.py#   register_exception_handlers(app)
@@ -85,42 +85,54 @@ Every feature module follows **exactly 4 layers**. Data flows: **Router → CRUD
 
 ---
 
-## 4. Role & Permission System
+## 4. Role & Permission System (RBAC)
 
-Defined in `utils/enums.py` as an enum:
+项目采用标准 RBAC（基于角色的访问控制）模型，定义在 `utils/permissions.py` 中：
 
-```python
-class UserRole(str, Enum):
-    USER = "user"       # Basic authenticated user
-    AUTHOR = "author"   # Can create/edit articles
-    ADMIN = "admin"     # Can delete anything, manage users
+```
+用户(User) -- N:N --> 角色(Role) -- N:N --> 权限(Permission)
 ```
 
-Ready-to-use dependencies in `utils/permissions.py`:
+### 权限依赖注入
 
-| Dependency | Allowed Roles | Typical Use |
-|------------|--------------|-------------|
-| `allow_user` | user, author, admin | Any authenticated user |
-| `allow_author` | author, admin | Content creation/update |
-| `allow_admin` | admin only | Deletion, user management |
+| Dependency | 说明 | 典型用法 |
+|------------|------|---------|
+| `require_role("admin")` | 需要指定角色 | `Depends(require_role("admin"))` |
+| `require_any_role("author", "admin")` | 需要任意一个角色 | `Depends(require_any_role("author", "admin"))` |
+| `require_permission("article:create")` | 需要指定权限 | `Depends(require_permission("article:create"))` |
+| `require_any_permission("a", "b")` | 需要任意一个权限 | `Depends(require_any_permission("article:delete", "admin:all"))` |
 
-Usage in router:
+### 在路由中使用
 
 ```python
-from utils.permissions import allow_user, allow_author, allow_admin
+from utils.permissions import require_role, require_any_role, require_permission
 
-@router.get("/items/{id}")
-async def get_item(..., user: User = Depends(allow_user)):
+# 需要指定角色
+@router.get("/admin-only")
+async def admin_only(user: User = Depends(require_role("admin"))):
     ...
 
-@router.post("/items")
-async def create_item(..., user: User = Depends(allow_author)):
+# 需要任意一个角色
+@router.post("/articles")
+async def create_article(user: User = Depends(require_any_role("author", "admin"))):
     ...
 
+# 需要指定权限
 @router.delete("/items/{id}")
-async def delete_item(..., user: User = Depends(allow_admin)):
+async def delete_item(user: User = Depends(require_permission("article:delete"))):
     ...
 ```
+
+### 预置角色
+
+| 角色 | 说明 | 典型权限 |
+|------|------|---------|
+| `admin` | 管理员 | 全部权限 |
+| `author` | 作者 | 文章创建/编辑 |
+| `user` | 普通用户 | 文章查看 |
+| `reader` | 读者 | 仅查看 |
+
+> **注意**：不要使用旧的 `allow_user` / `allow_author` / `allow_admin`，已废弃。统一使用 `require_role` / `require_any_role`。
 
 ---
 
@@ -319,7 +331,7 @@ from schemas.article import ArticleCreate, ArticleUpdate, ArticleResponse, Artic
 from crud.article import get_article_by_id, get_articles, create_article, update_article, delete_article
 from crud.user import get_user_by_id
 from utils.response import success_response
-from utils.permissions import allow_user, allow_author, allow_admin
+from utils.permissions import require_role, require_any_role
 
 router = APIRouter(prefix="/api/articles", tags=["articles"])
 
@@ -345,7 +357,7 @@ async def list_articles(
 async def get_article_detail(
     article_id: int,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(allow_user)
+    user: User = Depends(require_any_role("user", "author", "admin"))
 ):
     article = await get_article_by_id(db, article_id)
     if not article:
@@ -357,7 +369,7 @@ async def get_article_detail(
 async def create_new_article(
     article_data: ArticleCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(allow_author)
+    user: User = Depends(require_any_role("author", "admin"))
 ):
     db_user = await get_user_by_id(db, user.id)
     if not db_user:
@@ -371,7 +383,7 @@ async def update_existing_article(
     article_id: int,
     article_data: ArticleUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(allow_author)
+    user: User = Depends(require_any_role("author", "admin"))
 ):
     article = await get_article_by_id(db, article_id)
     if not article:
@@ -386,7 +398,7 @@ async def update_existing_article(
 async def delete_existing_article(
     article_id: int,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(allow_admin)
+    user: User = Depends(require_role("admin"))
 ):
     article = await get_article_by_id(db, article_id)
     if not article:
@@ -403,7 +415,7 @@ async def delete_existing_article(
 - `ArticleListResponse(…).model_dump()` for paginated list responses
 - Ownership check: `article.user_id != user.id` before update
 - User-existence check in router (not CRUD) before create
-- Role-based access via `allow_user` / `allow_author` / `allow_admin`
+- Role-based access via `require_role` / `require_any_role` / `require_permission`
 
 ---
 
@@ -443,7 +455,7 @@ Step 6: Register router         ← In routers/__init__.py + main.py
 - Use `model_dump(exclude_unset=True)` for partial updates
 - Use `model_config = ConfigDict(from_attributes=True)` on `*Response` schemas
 - Use `*ListResponse` wrapper for list endpoints
-- Role-check all endpoints appropriately
+- Role-check all endpoints appropriately (use `require_role` / `require_any_role` / `require_permission`)
 - User-existence validation in router layer, not CRUD
 - Use `flush()` instead of `commit()` in CRUD — `get_db` dependency auto-commits on yield success
 - Chinese `description=` in Field is acceptable but optional

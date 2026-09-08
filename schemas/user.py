@@ -1,7 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
-
-from utils.enums import UserRole
+from typing import Optional, List
 
 
 class BaseResponse(BaseModel):
@@ -18,11 +16,17 @@ class UserCreate(UserBase):
     password: str = Field(..., min_length=6, description="密码")
 
 
+class RoleBrief(BaseModel):
+    id: int
+    name: str
+    model_config = ConfigDict(from_attributes=True)
+
+
 class UserResponse(UserBase):
     id: int
     nickname: Optional[str] = None
     avatar: Optional[str] = None
-    role: str = "user"
+    roles: List[RoleBrief] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -49,4 +53,4 @@ class LoginResponse(BaseModel):
 
 
 class UserRoleUpdate(BaseModel):
-    role: UserRole = Field(..., description="用户角色")
+    role_ids: List[int] = Field(..., description="角色ID列表")

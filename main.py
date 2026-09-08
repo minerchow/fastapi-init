@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import user_router, health_router, article_router
+from routers import user_router, health_router, article_router, role_router
 from utils.exception_handlers import register_exception_handlers
 
 
@@ -36,6 +36,7 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(user_router)
 app.include_router(article_router)
+app.include_router(role_router)
 
 
 @app.get("/")
