@@ -185,11 +185,9 @@ class Article(Base):
     user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    # Optional relationship
+    # Optional relationship (no DB-level FK, use ORM relationship only)
     user: Mapped[Optional["User"]] = relationship(
-        "User", foreign_keys="Article.user_id",
-        primaryjoin="Article.user_id == User.id",
-        backref="articles"
+        "User", backref="articles"
     )
 
     @property
@@ -203,7 +201,7 @@ class Article(Base):
 **Key conventions:**
 - Inherit from `Base` (declared in `models/base.py` — provides `created_at`, `updated_at` using UTC via `_utcnow()`)
 - Soft-delete via `is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)`
-- Foreign key fields use `Integer` without FK constraint at DB level (historical reason — can add FK if needed)
+- Foreign key fields use `Integer` without FK constraint at DB level — **禁止在数据库层面添加外键约束**（不要使用 `ForeignKey`、`ForeignKeyConstraint` 或任何 DB-level FK），关联关系仅通过 ORM `relationship()` 维护
 - Relationships and `@property` for computed fields
 - `__repr__` for debugging
 
@@ -450,6 +448,7 @@ Step 6: Register router         ← In routers/__init__.py + main.py
 **Rules to follow:**
 - Follow **Article module** code exactly — same import patterns, same function signatures, same response format
 - Soft-delete always (`is_deleted` boolean) — never hard-delete
+- **Never use DB-level foreign keys** — do NOT use `ForeignKey`, `ForeignKeyConstraint`, or any database-level FK constraint. Foreign key columns should be plain `Integer` (with optional `index=True`). All table relationships are maintained only via ORM `relationship()`.
 - Paginated list always returns `(items, total)` tuple from CRUD
 - Use `joinedload()` for relationships in read queries
 - Use `model_dump(exclude_unset=True)` for partial updates
