@@ -27,7 +27,7 @@ uv sync
 mysql -u root -p < app_db.sql
 
 # 4. 启动服务
-uv run fastapi dev main.py
+uv run python -m uvicorn main:app --reload
 ```
 
 启动后访问：

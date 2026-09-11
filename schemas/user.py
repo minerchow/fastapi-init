@@ -14,6 +14,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6, description="密码")
+    confirm_password: str = Field(..., min_length=6, description="确认密码")
 
 
 class RoleBrief(BaseModel):
