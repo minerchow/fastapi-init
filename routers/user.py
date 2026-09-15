@@ -6,7 +6,7 @@ from models.user import User
 from schemas.user import UserCreate, UserResponse, UserLogin, LoginResponse, TokenData, RefreshTokenRequest, UserRoleUpdate
 from crud.user import get_user_by_username, create_user, get_user_by_id, update_user_roles, soft_delete_user
 from utils.response import success_response
-from utils.auth import get_current_user, create_tokens, verify_refresh_token
+from utils.auth import get_current_user, create_login_tokens, verify_refresh_token, rotate_tokens, revoke_user_tokens
 from utils.security import verify_password
 from utils.permissions import require_role
 
@@ -49,7 +49,7 @@ async def login(login_data: UserLogin, db: AsyncSession = Depends(get_db)):
             detail="用户名或密码错误"
         )
 
-    tokens = create_tokens(user.id)
+    tokens = await create_login_tokens(user.id)
 
     return success_response(
         message="登录成功",
@@ -66,7 +66,7 @@ async def refresh_token(
     db: AsyncSession = Depends(get_db)
 ):
     user = await verify_refresh_token(request.refresh_token, db)
-    tokens = create_tokens(user.id)
+    tokens = await rotate_tokens(user.id, request.refresh_token)
 
     return success_response(
         message="Token刷新成功",
@@ -132,4 +132,5 @@ async def delete_user(
         )
 
     await soft_delete_user(db, user)
+    await revoke_user_tokens(user.id)
     return success_response(message="删除用户成功")
