@@ -1,4 +1,5 @@
 import os
+import logging
 import traceback
 
 from fastapi import HTTPException, Request
@@ -6,7 +7,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette import status
 
-DEBUG_MODE = os.getenv("ENV", "development") == "development"
+logger = logging.getLogger(__name__)
+
+DEBUG_MODE = os.getenv("DEBUG", "false").lower() in ("1", "true", "yes")
 
 
 async def http_exception_handler(request: Request, exc: HTTPException):
@@ -21,6 +24,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 
 async def integrity_error_handler(request: Request, exc: IntegrityError):
+    logger.warning("IntegrityError %s %s: %s", request.method, request.url.path, str(exc.orig))
     error_msg = str(exc.orig)
 
     if "Duplicate entry" in error_msg:
@@ -49,6 +53,7 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
 
 
 async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError):
+    logger.exception("SQLAlchemyError %s %s", request.method, request.url.path)
     error_data = None
     if DEBUG_MODE:
         error_data = {
@@ -69,6 +74,7 @@ async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError):
 
 
 async def general_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception %s %s", request.method, request.url.path)
     error_data = None
     if DEBUG_MODE:
         error_data = {

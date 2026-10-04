@@ -73,7 +73,7 @@ TOKEN_ACTIVE_REFRESH_PREFIX = "token:active_refresh"
 
 
 async def _add_to_blacklist(user_id: int, *jti_list: Optional[str]) -> None:
-    """把若干 jti 追加到黑名单（逗号分隔字符串）"""
+    """把若干 jti 追加到黑名单（逗号分隔字符串）。Redis 故障时抛 503（fail-closed）。"""
     from config.cache_config import redis_client
     jti_list = [j for j in jti_list if j]
     if not jti_list:
@@ -85,6 +85,7 @@ async def _add_to_blacklist(user_id: int, *jti_list: Optional[str]) -> None:
         await redis_client.setex(key, int(REFRESH_TOKEN_EXPIRE.total_seconds()), ",".join(parts))
     except Exception:
         logger.exception("黑名单写入失败 user_id=%s", user_id)
+        raise HTTPException(status_code=503, detail="认证服务暂时不可用，请稍后重试")
 
 
 async def _in_blacklist(user_id: int, jti: Optional[str]) -> bool:
@@ -99,7 +100,7 @@ async def _in_blacklist(user_id: int, jti: Optional[str]) -> bool:
         return jti in val.split(",")
     except Exception:
         logger.exception("黑名单查询失败 user_id=%s", user_id)
-        return False
+        raise HTTPException(status_code=503, detail="认证服务暂时不可用，请稍后重试")
 
 
 async def _set_active(user_id: int, token_type: str, jti: str) -> None:
@@ -109,6 +110,7 @@ async def _set_active(user_id: int, token_type: str, jti: str) -> None:
         await redis_client.setex(key, int(REFRESH_TOKEN_EXPIRE.total_seconds()), jti)
     except Exception:
         logger.exception("active token 写入失败 user_id=%s type=%s", user_id, token_type)
+        raise HTTPException(status_code=503, detail="认证服务暂时不可用，请稍后重试")
 
 
 async def _get_active(user_id: int, token_type: str) -> Optional[str]:
@@ -118,7 +120,7 @@ async def _get_active(user_id: int, token_type: str) -> Optional[str]:
         return await redis_client.get(key)
     except Exception:
         logger.exception("active token 读取失败 user_id=%s type=%s", user_id, token_type)
-        return None
+        raise HTTPException(status_code=503, detail="认证服务暂时不可用，请稍后重试")
 
 
 # ── 登录 / 刷新 ──────────────────────────────────────────────────────
@@ -155,18 +157,24 @@ async def rotate_tokens(user_id: int, old_refresh_token: str) -> Dict[str, Any]:
 # ── 撤销（改密码 / 删除用户） ────────────────────────────────────────
 
 async def revoke_user_tokens(user_id: int) -> None:
-    """撤销该用户当前所有 access + refresh token"""
+    """撤销该用户当前所有 access + refresh token。
+
+    Redis 故障时不抛出：调用方（如删除用户）已完成软删除，
+    此后 get_current_user 查不到用户同样会 401，token 自然失效。
+    """
     from config.cache_config import redis_client
-    old_access_jti = await _get_active(user_id, "access")
-    old_refresh_jti = await _get_active(user_id, "refresh")
-    await _add_to_blacklist(user_id, old_access_jti, old_refresh_jti)
     try:
+        old_access_jti = await _get_active(user_id, "access")
+        old_refresh_jti = await _get_active(user_id, "refresh")
+        await _add_to_blacklist(user_id, old_access_jti, old_refresh_jti)
         await redis_client.delete(
             f"{TOKEN_ACTIVE_ACCESS_PREFIX}:{user_id}",
             f"{TOKEN_ACTIVE_REFRESH_PREFIX}:{user_id}",
         )
+    except HTTPException:
+        logger.exception("撤销用户 token 失败（Redis 不可用）user_id=%s", user_id)
     except Exception:
-        logger.exception("删除 active token 键失败 user_id=%s", user_id)
+        logger.exception("撤销用户 token 失败 user_id=%s", user_id)
 
 
 # ── 校验 ──────────────────────────────────────────────────────────────

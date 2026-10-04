@@ -41,6 +41,9 @@ redis_client = redis.Redis(
     db=redis_config["db"],
     password=redis_config["password"] if redis_config["password"] else None,
     decode_responses=True,
+    socket_timeout=2,
+    socket_connect_timeout=2,
+    retry_on_timeout=False,
 )
 
 

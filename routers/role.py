@@ -13,7 +13,10 @@ from crud.role import (
     create_permission, update_permission, delete_permission,
 )
 from utils.response import success_response
-from utils.permissions import require_role
+from utils.permissions import (
+    require_permission,
+    ROLE_READ, ROLE_CREATE, ROLE_UPDATE, ROLE_DELETE,
+)
 
 router = APIRouter(prefix="/api", tags=["rbac"])
 
@@ -25,7 +28,7 @@ async def list_roles(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(require_permission(ROLE_READ)),
 ):
     roles, total = await get_roles(db, page, page_size)
     total_pages = math.ceil(total / page_size) if total > 0 else 1
@@ -41,7 +44,7 @@ async def list_roles(
 @router.get("/roles/all")
 async def list_all_roles(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(require_permission(ROLE_READ)),
 ):
     roles = await get_all_roles(db)
     return success_response(
@@ -54,7 +57,7 @@ async def list_all_roles(
 async def get_role_detail(
     role_id: int,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(require_permission(ROLE_READ)),
 ):
     role = await get_role_by_id(db, role_id)
     if not role:
@@ -69,7 +72,7 @@ async def get_role_detail(
 async def create_new_role(
     role_data: RoleCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(require_permission(ROLE_CREATE)),
 ):
     existing = await get_role_by_name(db, role_data.name)
     if existing:
@@ -86,7 +89,7 @@ async def update_existing_role(
     role_id: int,
     role_data: RoleUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(require_permission(ROLE_UPDATE)),
 ):
     role = await get_role_by_id(db, role_id)
     if not role:
@@ -106,7 +109,7 @@ async def update_existing_role(
 async def delete_existing_role(
     role_id: int,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(require_permission(ROLE_DELETE)),
 ):
     role = await get_role_by_id(db, role_id)
     if not role:
@@ -125,7 +128,7 @@ async def list_permissions(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(require_permission(ROLE_READ)),
 ):
     permissions, total = await get_permissions(db, page, page_size)
     total_pages = math.ceil(total / page_size) if total > 0 else 1
@@ -141,7 +144,7 @@ async def list_permissions(
 @router.get("/permissions/all")
 async def list_all_permissions(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(require_permission(ROLE_READ)),
 ):
     permissions = await get_all_permissions(db)
     return success_response(
@@ -154,7 +157,7 @@ async def list_all_permissions(
 async def get_permission_detail(
     permission_id: int,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(require_permission(ROLE_READ)),
 ):
     permission = await get_permission_by_id(db, permission_id)
     if not permission:
@@ -169,7 +172,7 @@ async def get_permission_detail(
 async def create_new_permission(
     permission_data: PermissionCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(require_permission(ROLE_UPDATE)),
 ):
     existing = await get_permission_by_code(db, permission_data.code)
     if existing:
@@ -186,7 +189,7 @@ async def update_existing_permission(
     permission_id: int,
     permission_data: PermissionUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(require_permission(ROLE_UPDATE)),
 ):
     permission = await get_permission_by_id(db, permission_id)
     if not permission:
@@ -206,7 +209,7 @@ async def update_existing_permission(
 async def delete_existing_permission(
     permission_id: int,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(require_permission(ROLE_DELETE)),
 ):
     permission = await get_permission_by_id(db, permission_id)
     if not permission:

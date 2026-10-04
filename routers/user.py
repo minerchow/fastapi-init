@@ -8,7 +8,7 @@ from crud.user import get_user_by_username, create_user, get_user_by_id, update_
 from utils.response import success_response
 from utils.auth import get_current_user, create_login_tokens, verify_refresh_token, rotate_tokens, revoke_user_tokens
 from utils.security import verify_password
-from utils.permissions import require_role
+from utils.permissions import require_permission, USER_READ, USER_DELETE, USER_ASSIGN_ROLE
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -86,7 +86,7 @@ async def get_user_info(user: User = Depends(get_current_user)):
 async def get_user_detail(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("admin"))
+    user: User = Depends(require_permission(USER_READ))
 ):
     target_user = await get_user_by_id(db, user_id)
     if not target_user:
@@ -102,7 +102,7 @@ async def change_user_roles(
     user_id: int,
     role_data: UserRoleUpdate,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_role("admin"))
+    admin: User = Depends(require_permission(USER_ASSIGN_ROLE))
 ):
     user = await get_user_by_id(db, user_id)
     if not user:
@@ -122,7 +122,7 @@ async def change_user_roles(
 async def delete_user(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_role("admin"))
+    admin: User = Depends(require_permission(USER_DELETE))
 ):
     user = await get_user_by_id(db, user_id)
     if not user:

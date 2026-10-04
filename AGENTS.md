@@ -132,7 +132,28 @@ async def delete_item(user: User = Depends(require_permission("article:delete"))
 | `user` | 普通用户 | 文章查看 |
 | `reader` | 读者 | 仅查看 |
 
-> **注意**：不要使用旧的 `allow_user` / `allow_author` / `allow_admin`，已废弃。统一使用 `require_role` / `require_any_role`。
+### 权限码常量与属主检查（推荐模式）
+
+**路由层一律使用权限码（`require_permission` / `require_any_permission`），不要硬编码角色名。** 角色只是权限的集合，调整角色-权限配置即可改变接口准入，无需改代码。权限码常量定义在 `utils/permissions.py`：
+
+```python
+from utils.permissions import (
+    require_permission, require_any_permission, check_own_or_permission,
+    ARTICLE_READ, ARTICLE_CREATE, ARTICLE_UPDATE, ARTICLE_UPDATE_OWN,
+    ARTICLE_DELETE, ARTICLE_DELETE_OWN,
+    USER_READ, USER_DELETE, USER_ASSIGN_ROLE,
+    ROLE_READ, ROLE_CREATE, ROLE_UPDATE, ROLE_DELETE,
+)
+```
+
+"仅能操作自己的资源" 场景：依赖用 `require_any_permission(ARTICLE_UPDATE, ARTICLE_UPDATE_OWN)`，路由内再调用：
+
+```python
+check_own_or_permission(user, ARTICLE_UPDATE, article.user_id)
+# 拥有 ARTICLE_UPDATE（跨属主权限）直接放行；否则 owner 必须是本人，不然 403
+```
+
+> **注意**：不要使用旧的 `allow_user` / `allow_author` / `allow_admin`，已废弃。`require_role` / `require_any_role` 仅保留给"角色本身即资源"的场景（如用户-角色绑定管理），业务接口一律使用权限码依赖。新增权限码时同步更新 `scripts/init_rbac.py` 并重新执行。
 
 ---
 
@@ -329,16 +350,21 @@ from schemas.article import ArticleCreate, ArticleUpdate, ArticleResponse, Artic
 from crud.article import get_article_by_id, get_articles, create_article, update_article, delete_article
 from crud.user import get_user_by_id
 from utils.response import success_response
-from utils.permissions import require_role, require_any_role
+from utils.permissions import (
+    require_permission, require_any_permission, check_own_or_permission,
+    ARTICLE_READ, ARTICLE_CREATE, ARTICLE_UPDATE, ARTICLE_UPDATE_OWN,
+    ARTICLE_DELETE, ARTICLE_DELETE_OWN,
+)
 
 router = APIRouter(prefix="/api/articles", tags=["articles"])
 
-# --- Public list (no auth required) ---
+# --- List (requires article:read) ---
 @router.get("")
 async def list_articles(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(ARTICLE_READ))
 ):
     articles, total = await get_articles(db, page, page_size)
     total_pages = math.ceil(total / page_size)
@@ -355,7 +381,7 @@ async def list_articles(
 async def get_article_detail(
     article_id: int,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_any_role("user", "author", "admin"))
+    user: User = Depends(require_permission(ARTICLE_READ))
 ):
     article = await get_article_by_id(db, article_id)
     if not article:
@@ -367,7 +393,7 @@ async def get_article_detail(
 async def create_new_article(
     article_data: ArticleCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_any_role("author", "admin"))
+    user: User = Depends(require_permission(ARTICLE_CREATE))
 ):
     db_user = await get_user_by_id(db, user.id)
     if not db_user:
@@ -381,13 +407,12 @@ async def update_existing_article(
     article_id: int,
     article_data: ArticleUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_any_role("author", "admin"))
+    user: User = Depends(require_any_permission(ARTICLE_UPDATE, ARTICLE_UPDATE_OWN))
 ):
     article = await get_article_by_id(db, article_id)
     if not article:
         raise HTTPException(status_code=404, detail="文章不存在")
-    if article.user_id != user.id:
-        raise HTTPException(status_code=403, detail="只能修改自己的文章")
+    check_own_or_permission(user, ARTICLE_UPDATE, article.user_id)
     updated_article = await update_article(db, article, article_data)
     return success_response(message="更新文章成功", data=ArticleResponse.model_validate(updated_article))
 
@@ -396,11 +421,12 @@ async def update_existing_article(
 async def delete_existing_article(
     article_id: int,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("admin"))
+    user: User = Depends(require_any_permission(ARTICLE_DELETE, ARTICLE_DELETE_OWN))
 ):
     article = await get_article_by_id(db, article_id)
     if not article:
         raise HTTPException(status_code=404, detail="文章不存在")
+    check_own_or_permission(user, ARTICLE_DELETE, article.user_id)
     deleted_article = await delete_article(db, article)
     return success_response(message="删除文章成功", data=ArticleResponse.model_validate(deleted_article))
 ```
@@ -411,9 +437,9 @@ async def delete_existing_article(
 - HTTPException for error cases (caught by global handler, formatted as unified JSON)
 - `ArticleResponse.model_validate(obj)` for serialization
 - `ArticleListResponse(…).model_dump()` for paginated list responses
-- Ownership check: `article.user_id != user.id` before update
+- Ownership check: `check_own_or_permission(user, ARTICLE_UPDATE, article.user_id)` before update
 - User-existence check in router (not CRUD) before create
-- Role-based access via `require_role` / `require_any_role` / `require_permission`
+- Permission-based access via `require_permission` / `require_any_permission` with permission-code constants
 
 ---
 
@@ -454,7 +480,7 @@ Step 6: Register router         ← In routers/__init__.py + main.py
 - Use `model_dump(exclude_unset=True)` for partial updates
 - Use `model_config = ConfigDict(from_attributes=True)` on `*Response` schemas
 - Use `*ListResponse` wrapper for list endpoints
-- Role-check all endpoints appropriately (use `require_role` / `require_any_role` / `require_permission`)
+- Gate all endpoints with permission codes (`require_permission` / `require_any_permission` using constants from `utils/permissions.py`); register new permission codes in `scripts/init_rbac.py`
 - User-existence validation in router layer, not CRUD
 - Use `flush()` instead of `commit()` in CRUD — `get_db` dependency auto-commits on yield success
 - Chinese `description=` in Field is acceptable but optional

@@ -108,7 +108,7 @@ async def init_rbac():
                     print(f"    分配权限: {len(perm_ids)} 个")
 
             await db.commit()
-            print("\n✅ RBAC 基础数据初始化完成!")
+            print("\nRBAC 基础数据初始化完成!")
 
         except Exception as e:
             await db.rollback()

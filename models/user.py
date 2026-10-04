@@ -18,12 +18,13 @@ class User(Base):
     avatar: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    # 多对多：用户-角色
+    # 多对多：用户-角色。secondaryjoin 过滤软删除角色，防止已删角色继续授予权限。
+    # 注：整体替换 roles 时，已软删角色残留的 user_role 旧行不会被清理，但被过滤条件遮蔽，无权限影响。
     roles: Mapped[List["Role"]] = relationship(
         "Role",
         secondary=user_role,
         primaryjoin="User.id == user_role.c.user_id",
-        secondaryjoin="Role.id == user_role.c.role_id",
+        secondaryjoin="and_(Role.id == user_role.c.role_id, Role.is_deleted == False)",
         backref="users",
         lazy="selectin",
     )

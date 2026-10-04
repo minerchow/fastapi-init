@@ -9,6 +9,39 @@ if TYPE_CHECKING:
     from models.user import User
 
 
+# ==================== 权限码常量 ====================
+
+ARTICLE_READ = "article:read"
+ARTICLE_CREATE = "article:create"
+ARTICLE_UPDATE = "article:update"
+ARTICLE_UPDATE_OWN = "article:update:own"
+ARTICLE_DELETE = "article:delete"
+ARTICLE_DELETE_OWN = "article:delete:own"
+
+USER_READ = "user:read"
+USER_CREATE = "user:create"
+USER_UPDATE = "user:update"
+USER_DELETE = "user:delete"
+USER_ASSIGN_ROLE = "user:assign_role"
+
+ROLE_READ = "role:read"
+ROLE_CREATE = "role:create"
+ROLE_UPDATE = "role:update"
+ROLE_DELETE = "role:delete"
+
+
+# ==================== 属主检查 ====================
+
+def check_own_or_permission(user: "User", full_permission: str, owner_id: Optional[int]) -> None:
+    """跨属主资源检查：拥有 full_permission 可操作任意资源，否则只能操作自己的。"""
+    if owner_id == user.id or user.has_permission(full_permission):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="只能操作自己创建的资源"
+    )
+
+
 # ==================== 基于角色的检查 ====================
 
 def require_role(role_name: str):
