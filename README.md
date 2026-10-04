@@ -29,7 +29,10 @@ PYTHONPATH=. uv run python -m alembic upgrade head
 PYTHONPATH=. uv run python scripts/init_rbac.py
 PYTHONPATH=. uv run python scripts/init_menus.py
 
-# 4. 启动服务
+# 4. 创建/接管第一个管理员（快照里的 xiaoming 没有可用密码，用它顺手设密码并确认 admin 绑定）
+PYTHONPATH=. uv run python scripts/create_admin.py xiaoming
+
+# 5. 启动服务
 uv run python -m uvicorn main:app --reload
 ```
 
@@ -583,6 +586,10 @@ fastapi-init/
 │   └── base_cache.py        #   Redis 缓存基类
 ├── alembic/                 # 数据库迁移
 │   └── versions/            #   迁移脚本
+├── scripts/                 # 初始化脚本（均为幂等，可重复执行）
+│   ├── init_rbac.py         #   种权限码与角色
+│   ├── init_menus.py        #   种左侧菜单树
+│   └── create_admin.py      #   创建第一个管理员并绑定 admin 角色
 ├── .env                     # 开发环境变量
 ├── .env.test                # 测试环境变量
 ├── .env.production          # 生产环境变量
@@ -597,6 +604,8 @@ fastapi-init/
 |--------|------|------|
 | xiaoming | 需要自行设置 | admin |
 | xiaoming2 | 需要自行设置 | author |
+
+设密码用 `PYTHONPATH=. uv run python scripts/create_admin.py xiaoming`（幂等：已存在则重置密码并确保绑定 admin，不存在则创建）。生产空库引导见「数据库初始化」一节。
 
 ## 多环境配置
 
@@ -619,13 +628,16 @@ cd D:/work/fastapi-init
 mysql -u root -p < app_db.sql
 
 # 2) 应用迁移到最新结构（当前 head = d3a9f6c1b842，建 menu 表）
-PYTHONPATH=. uv run python -m alembic upgrade head
+set PYTHONPATH=. uv run python -m alembic upgrade head
 
 # 3) 种权限码与角色（admin 获得全部权限码）
-PYTHONPATH=. uv run python scripts/init_rbac.py
+set PYTHONPATH=. && uv run python scripts\init_rbac.py
 
 # 4) 种左侧菜单树（叶子按 code 反查 permission.id 做权限绑定）
-PYTHONPATH=. uv run python scripts/init_menus.py
+set PYTHONPATH=. && uv run python scripts\init_menus.py
+
+# 5)增加一个管理员账号
+set PYTHONPATH=. && uv run python scripts\create_admin.py
 ```
 
 **顺序不能颠倒，且第 3 步不是可选的。** 两个原因：
@@ -634,6 +646,28 @@ PYTHONPATH=. uv run python scripts/init_menus.py
 - 本项目**没有 superuser 短路**，`admin` 能过守卫纯粹因为它恰好持有全部权限码，而它的权限集是 `init_rbac.py` 里 `[p["code"] for p in PERMISSIONS]` 算出来的。只跑迁移不跑这个脚本，admin 访问 `/api/menus/*` 会全部 403。
 
 `init_rbac.py` 与 `init_menus.py` 都是幂等的：前者按 `permission.code` / `role.name` upsert，后者按 `menu.path`（命中已软删除的同路径行会复活并同步字段）。重复执行只会打印「已存在」，不会产生重复数据。
+
+### 生产空库引导（第一个管理员）
+
+空库直接发布时存在一个**引导死锁**：`POST /api/users/register` 创建的用户不带任何角色，而绑角色的 `PUT /api/users/{user_id}/roles` 需要 `user:assign_role` 权限；本项目又没有 superuser 短路，所以第一个管理员无法通过 API 自己授权，必须走离线脚本。
+
+不导入开发快照（`app_db.sql` 含开发数据，生产不建议用），完整引导四步：
+
+```bash
+# 1) 建表（纯 DDL，无任何数据）
+PYTHONPATH=. uv run python -m alembic upgrade head
+
+# 2) 种 20 个权限码 + admin/author/user 三个角色
+PYTHONPATH=. uv run python scripts/init_rbac.py
+
+# 3) 种左侧菜单树
+PYTHONPATH=. uv run python scripts/init_menus.py
+
+# 4) 创建第一个用户并绑定 admin 角色（省略密码参数则交互式输入，不落 shell 历史）
+PYTHONPATH=. uv run python scripts/create_admin.py <用户名>
+```
+
+`create_admin.py` 依赖第 2 步的 admin 角色，不存在会直接报错退出；对已有用户（含软删）幂等：复活并重置密码、确保 admin 绑定，不会产生重复数据。跑完之后即可用该账号登录，在前端「用户管理」页正常建号、给其他人分配 author/user 角色。JWT 里只存 user_id、权限每次请求实时查库，绑定立即生效，无需重启服务。
 
 ### 校验当前状态
 
