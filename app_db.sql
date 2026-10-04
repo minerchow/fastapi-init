@@ -11,7 +11,7 @@
  Target Server Version : 80012 (8.0.12)
  File Encoding         : 65001
 
- Date: 15/09/2026 17:37:24
+ Date: 04/10/2026 15:45:26
 */
 
 SET NAMES utf8mb4;
@@ -29,7 +29,7 @@ CREATE TABLE `alembic_version`  (
 -- ----------------------------
 -- Records of alembic_version
 -- ----------------------------
-INSERT INTO `alembic_version` VALUES ('782f2e8edc1b');
+INSERT INTO `alembic_version` VALUES ('b7e1a2c3d4f5');
 
 -- ----------------------------
 -- Table structure for article
@@ -45,7 +45,7 @@ CREATE TABLE `article`  (
   `is_deleted` tinyint(1) NOT NULL,
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `ix_article_user_id`(`user_id`) USING BTREE
-) ENGINE = MyISAM AUTO_INCREMENT = 5 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = DYNAMIC;
+) ENGINE = MyISAM AUTO_INCREMENT = 6 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of article
@@ -54,6 +54,7 @@ INSERT INTO `article` VALUES (1, 'aaa5', 'dd4', '2026-05-04 15:54:50', '2026-07-
 INSERT INTO `article` VALUES (2, 'aaa4', 'xx2', '2026-05-04 15:55:27', '2026-05-04 17:29:23', 1, 0);
 INSERT INTO `article` VALUES (3, 'aa11', 'xx2222', '2026-05-04 17:41:07', '2026-05-04 17:41:07', 1, 0);
 INSERT INTO `article` VALUES (4, '文111', '文章内容22', '2026-09-08 02:12:36', '2026-09-08 02:17:13', 2, 0);
+INSERT INTO `article` VALUES (5, 'admin-edit', 'x', '2026-10-04 07:07:46', '2026-10-04 07:07:47', 6, 1);
 
 -- ----------------------------
 -- Table structure for permission
@@ -64,7 +65,7 @@ CREATE TABLE `permission`  (
   `code` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `description` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
-  `is_deleted` int(11) NOT NULL,
+  `is_deleted` tinyint(1) NOT NULL DEFAULT 0,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL,
   PRIMARY KEY (`id`) USING BTREE,
@@ -98,7 +99,7 @@ CREATE TABLE `role`  (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `description` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
-  `is_deleted` int(11) NOT NULL,
+  `is_deleted` tinyint(1) NOT NULL DEFAULT 0,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL,
   PRIMARY KEY (`id`) USING BTREE,
@@ -162,7 +163,7 @@ CREATE TABLE `user`  (
   `is_deleted` tinyint(1) NOT NULL,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `username_UNIQUE`(`username` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 5 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 8 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Records of user
@@ -171,6 +172,9 @@ INSERT INTO `user` VALUES (1, 'xiaoming', '$2b$12$DnZ2ciQ5rJa4SuX6iNYopukir1mSS8
 INSERT INTO `user` VALUES (2, 'xiaoming2', '$2b$12$knGhyOYS5W6c34Y70El7IurvKQIkH03SuKA0vvgBNeimdlmprQUC6', NULL, NULL, '2026-05-04 14:45:57', '2026-05-04 17:42:50', 0);
 INSERT INTO `user` VALUES (3, 'test', '$2b$12$Qfx5pKrGaoSxhpXON1639OTU1ZepSQMfYiqHcHgeaUks.8wKfYk1G', NULL, NULL, '2026-09-10 02:01:17', '2026-09-10 02:01:17', 0);
 INSERT INTO `user` VALUES (4, 'xiaoming8', '$2b$12$LuSWsakjUWsoeP.zaQmlvuH7t6tYBJwBR3dHc7VnRy6mAoZvqJ1kG', NULL, NULL, '2026-09-11 01:42:12', '2026-09-11 01:42:12', 0);
+INSERT INTO `user` VALUES (5, 'smoke_c6313996', '$2b$12$lnUYzIuIdyZCM92A8JOKDuTduBB3UkhVPsSNny8/1a1b9ShEoqaMK', NULL, NULL, '2026-10-04 07:03:44', '2026-10-04 07:03:44', 0);
+INSERT INTO `user` VALUES (6, 'smoke_d8b0d78c', '$2b$12$IOfKrg0BzZbESi1uyPL6se/Ly1hn5hge4KbYYwC3C3kTSrTZlX6oO', NULL, NULL, '2026-10-04 07:07:46', '2026-10-04 07:07:47', 1);
+INSERT INTO `user` VALUES (7, 'smoke_o_d8b0d78c', '$2b$12$C/mdbRPijTFstXoNu/esfeTF.knkQx0lOwps26i.qca0bTTwh09sq', NULL, NULL, '2026-10-04 07:07:47', '2026-10-04 07:07:47', 0);
 
 -- ----------------------------
 -- Table structure for user_role
@@ -188,5 +192,8 @@ CREATE TABLE `user_role`  (
 -- ----------------------------
 INSERT INTO `user_role` VALUES (1, 1);
 INSERT INTO `user_role` VALUES (2, 3);
+INSERT INTO `user_role` VALUES (4, 2);
+INSERT INTO `user_role` VALUES (6, 2);
+INSERT INTO `user_role` VALUES (7, 1);
 
 SET FOREIGN_KEY_CHECKS = 1;
