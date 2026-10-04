@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from sqlalchemy.orm import joinedload
 from fastapi import HTTPException
 from models.article import Article
@@ -7,6 +7,26 @@ from models.user import User
 from models.role import Role
 from schemas.user import UserCreate
 from utils.security import get_hash_password
+
+
+async def get_users(
+    db: AsyncSession,
+    page: int = 1,
+    page_size: int = 10
+) -> tuple[list[User], int]:
+    offset = (page - 1) * page_size
+
+    count_query = select(func.count(User.id)).where(User.is_deleted == False)
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+
+    query = select(User).options(joinedload(User.roles)).where(
+        User.is_deleted == False
+    ).order_by(User.id.asc()).offset(offset).limit(page_size)
+    result = await db.execute(query)
+    users = list(result.scalars().unique().all())
+
+    return users, total
 
 
 async def get_user_by_username(db: AsyncSession, username: str) -> User | None:

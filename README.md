@@ -23,8 +23,11 @@ uv sync
 
 # 2. 配置环境变量（见 .env 文件）
 
-# 3. 初始化数据库
+# 3. 初始化数据库（导入快照 + 迁移 + 基础数据，详见「数据库初始化」一节，顺序不能乱）
 mysql -u root -p < app_db.sql
+PYTHONPATH=. uv run python -m alembic upgrade head
+PYTHONPATH=. uv run python scripts/init_rbac.py
+PYTHONPATH=. uv run python scripts/init_menus.py
 
 # 4. 启动服务
 uv run python -m uvicorn main:app --reload
@@ -603,15 +606,53 @@ fastapi-init/
 | 测试 | `.env.test` | `APP_ENV=test uv run fastapi dev main.py` |
 | 生产 | `.env.production` | `APP_ENV=production uv run fastapi run main.py` |
 
-## 数据库迁移
+## 数据库初始化与迁移
+
+### 全新环境的初始化顺序
+
+`app_db.sql` 是 Navicat 手工导出的**快照**（含开发数据、`alembic_version` 停在 `b7e1a2c3d4f5`），它本身不含 `menu` 表也不含 `menu:*` 权限码，因此导入后必须再走三步：
 
 ```bash
-# 自动生成迁移脚本
-uv run alembic revision --autogenerate -m "描述"
+cd D:/work/fastapi-init
 
-# 应用迁移
-uv run alembic upgrade head
+# 1) 导入快照（建库建表；已有库可跳过，直接看下一步）
+mysql -u root -p < app_db.sql
 
-# 回滚一步
-uv run alembic downgrade -1
+# 2) 应用迁移到最新结构（当前 head = d3a9f6c1b842，建 menu 表）
+PYTHONPATH=. uv run python -m alembic upgrade head
+
+# 3) 种权限码与角色（admin 获得全部权限码）
+PYTHONPATH=. uv run python scripts/init_rbac.py
+
+# 4) 种左侧菜单树（叶子按 code 反查 permission.id 做权限绑定）
+PYTHONPATH=. uv run python scripts/init_menus.py
 ```
+
+**顺序不能颠倒，且第 3 步不是可选的。** 两个原因：
+
+- `init_menus.py` 按权限 `code` 反查 id，码不存在时直接 `RuntimeError` 回滚，不会静默跳过绑定。
+- 本项目**没有 superuser 短路**，`admin` 能过守卫纯粹因为它恰好持有全部权限码，而它的权限集是 `init_rbac.py` 里 `[p["code"] for p in PERMISSIONS]` 算出来的。只跑迁移不跑这个脚本，admin 访问 `/api/menus/*` 会全部 403。
+
+`init_rbac.py` 与 `init_menus.py` 都是幂等的：前者按 `permission.code` / `role.name` upsert，后者按 `menu.path`（命中已软删除的同路径行会复活并同步字段）。重复执行只会打印「已存在」，不会产生重复数据。
+
+### 校验当前状态
+
+```bash
+PYTHONPATH=. uv run python -m alembic current   # 应输出 head 的 revision
+```
+
+> **Windows 注意**：`uv run alembic ...` 会报 `error: uv trampoline failed to canonicalize script path`（uv 无法解析 venv 里的入口脚本 shim）。改用 `uv run python -m alembic ...`，或直接调用 `.venv/Scripts/python.exe -m alembic ...`，两者都绕开了那个 shim。
+
+### 模型改动后新增迁移
+
+```bash
+# 生成（记得先确认新模型已在 models/__init__.py 里导出，否则 env.py 看不见）
+PYTHONPATH=. uv run python -m alembic revision --autogenerate -m "描述"
+
+# 应用 / 回滚一步
+PYTHONPATH=. uv run python -m alembic upgrade head
+PYTHONPATH=. uv run python -m alembic downgrade -1
+```
+
+**autogenerate 的结果必须人工过一遍**，它在本项目有两个已成事实的偏差：会按 ORM 声明生成 `ForeignKeyConstraint`（项目硬性禁止 DB 级外键，见 `AGENTS.md`），且会把 `is_deleted` 建成 `Integer`（`782f2e8edc1b` → 后来由 `b7e1a2c3d4f5` 改回 `Boolean`）。`d3a9f6c1b842_add_menu_table.py` 是手写的，可作为新增表的模板：不写 `ForeignKeyConstraint`、不写 `server_default`（时间戳与布尔默认都留在 Python 侧）。
+

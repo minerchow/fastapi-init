@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import math
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.db_conf import get_db
 from models.user import User
-from schemas.user import UserCreate, UserResponse, UserLogin, LoginResponse, TokenData, RefreshTokenRequest, UserRoleUpdate
-from crud.user import get_user_by_username, create_user, get_user_by_id, update_user_roles, soft_delete_user
+from schemas.user import UserCreate, UserResponse, UserLogin, LoginResponse, TokenData, RefreshTokenRequest, UserRoleUpdate, UserListResponse
+from crud.user import get_user_by_username, create_user, get_user_by_id, get_users, update_user_roles, soft_delete_user
 from utils.response import success_response
 from utils.auth import get_current_user, create_login_tokens, verify_refresh_token, rotate_tokens, revoke_user_tokens
 from utils.security import verify_password
@@ -79,6 +81,28 @@ async def get_user_info(user: User = Depends(get_current_user)):
     return success_response(
         message="获取用户信息成功",
         data=UserResponse.model_validate(user)
+    )
+
+
+@router.get("")
+async def list_users(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页数量"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(USER_READ))
+):
+    users, total = await get_users(db, page, page_size)
+    total_pages = math.ceil(total / page_size)
+
+    return success_response(
+        message="获取用户列表成功",
+        data=UserListResponse(
+            items=[UserResponse.model_validate(u) for u in users],
+            total=total,
+            page=page,
+            page_size=page_size,
+            total_pages=total_pages
+        ).model_dump()
     )
 
 

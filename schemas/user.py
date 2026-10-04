@@ -55,3 +55,11 @@ class LoginResponse(BaseModel):
 
 class UserRoleUpdate(BaseModel):
     role_ids: List[int] = Field(..., description="角色ID列表")
+
+
+class UserListResponse(BaseModel):
+    items: List[UserResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

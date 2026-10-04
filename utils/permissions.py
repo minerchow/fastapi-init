@@ -29,6 +29,11 @@ ROLE_CREATE = "role:create"
 ROLE_UPDATE = "role:update"
 ROLE_DELETE = "role:delete"
 
+MENU_READ = "menu:read"
+MENU_CREATE = "menu:create"
+MENU_UPDATE = "menu:update"
+MENU_DELETE = "menu:delete"
+
 
 # ==================== 属主检查 ====================
 

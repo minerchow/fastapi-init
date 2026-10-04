@@ -31,6 +31,12 @@ PERMISSIONS = [
     {"code": "role:create", "name": "创建角色", "description": "创建新角色"},
     {"code": "role:update", "name": "修改角色", "description": "修改角色信息和权限"},
     {"code": "role:delete", "name": "删除角色", "description": "删除角色"},
+
+    # 菜单权限
+    {"code": "menu:read", "name": "查看菜单", "description": "查看菜单树和菜单详情"},
+    {"code": "menu:create", "name": "创建菜单", "description": "创建导航菜单"},
+    {"code": "menu:update", "name": "修改菜单", "description": "修改菜单信息及其层级"},
+    {"code": "menu:delete", "name": "删除菜单", "description": "删除菜单"},
 ]
 
 # 预设角色及权限编码
