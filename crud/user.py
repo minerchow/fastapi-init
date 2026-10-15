@@ -6,7 +6,7 @@ from models.article import Article
 from models.user import User
 from models.role import Role
 from schemas.user import UserCreate
-from utils.security import get_hash_password
+from utils.security import get_hash_password_async
 
 
 async def get_users(
@@ -46,7 +46,7 @@ async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
 
 
 async def create_user(db: AsyncSession, user_data: UserCreate) -> User:
-    hashed_password = get_hash_password(user_data.password)
+    hashed_password = await get_hash_password_async(user_data.password)
     user = User(username=user_data.username, password=hashed_password)
     db.add(user)
     await db.flush()

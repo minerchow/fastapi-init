@@ -9,7 +9,7 @@ from schemas.user import UserCreate, UserResponse, UserLogin, LoginResponse, Tok
 from crud.user import get_user_by_username, create_user, get_user_by_id, get_users, update_user_roles, soft_delete_user
 from utils.response import success_response
 from utils.auth import get_current_user, create_login_tokens, verify_refresh_token, rotate_tokens, revoke_user_tokens
-from utils.security import verify_password
+from utils.security import verify_password_async
 from utils.permissions import require_permission, USER_READ, USER_DELETE, USER_ASSIGN_ROLE
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -45,7 +45,7 @@ async def login(login_data: UserLogin, db: AsyncSession = Depends(get_db)):
             detail="用户名或密码错误"
         )
 
-    if not verify_password(login_data.password, user.password):
+    if not await verify_password_async(login_data.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误"

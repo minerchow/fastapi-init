@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 
+import anyio
 import jwt
 from fastapi import Header, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,9 +19,27 @@ from config.jwt_config import (
 logger = logging.getLogger(__name__)
 
 
+# ── JWT 编解码（PyJWT 为纯同步实现，统一丢到线程池，避免阻塞事件循环） ──
+
+def _jwt_encode_sync(payload: dict) -> str:
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def _jwt_decode_sync(token: str) -> Dict[str, Any]:
+    return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+
+
+async def encode_jwt(payload: dict) -> str:
+    return await anyio.to_thread.run_sync(_jwt_encode_sync, payload)
+
+
+async def decode_jwt(token: str) -> Dict[str, Any]:
+    return await anyio.to_thread.run_sync(_jwt_decode_sync, token)
+
+
 # ── Token 生成（每个 token 带唯一 jti） ──────────────────────────────
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+async def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     to_encode["type"] = "access"
     to_encode["jti"] = str(uuid.uuid4())
@@ -29,11 +48,10 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     else:
         expire = datetime.now(timezone.utc) + ACCESS_TOKEN_EXPIRE
     to_encode["exp"] = int(expire.timestamp())
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-    return encoded_jwt
+    return await encode_jwt(to_encode)
 
 
-def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+async def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     to_encode["type"] = "refresh"
     to_encode["jti"] = str(uuid.uuid4())
@@ -42,14 +60,13 @@ def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) 
     else:
         expire = datetime.now(timezone.utc) + REFRESH_TOKEN_EXPIRE
     to_encode["exp"] = int(expire.timestamp())
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-    return encoded_jwt
+    return await encode_jwt(to_encode)
 
 
-def create_tokens(user_id: int) -> Dict[str, Any]:
+async def create_tokens(user_id: int) -> Dict[str, Any]:
     token_data = {"sub": str(user_id)}
-    access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token(token_data)
+    access_token = await create_access_token(token_data)
+    refresh_token = await create_refresh_token(token_data)
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -127,9 +144,9 @@ async def _get_active(user_id: int, token_type: str) -> Optional[str]:
 
 async def create_login_tokens(user_id: int) -> Dict[str, Any]:
     """登录：生成新 token 并登记 active jti（覆盖旧会话）"""
-    tokens = create_tokens(user_id)
-    access_jti = jwt.decode(tokens["access_token"], JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])["jti"]
-    refresh_jti = jwt.decode(tokens["refresh_token"], JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])["jti"]
+    tokens = await create_tokens(user_id)
+    access_jti = (await decode_jwt(tokens["access_token"]))["jti"]
+    refresh_jti = (await decode_jwt(tokens["refresh_token"]))["jti"]
     await _set_active(user_id, "access", access_jti)
     await _set_active(user_id, "refresh", refresh_jti)
     return tokens
@@ -137,7 +154,7 @@ async def create_login_tokens(user_id: int) -> Dict[str, Any]:
 
 async def rotate_tokens(user_id: int, old_refresh_token: str) -> Dict[str, Any]:
     """刷新：作废旧 access + 旧 refresh，签发新的一对（单会话策略）"""
-    old_payload = jwt.decode(old_refresh_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    old_payload = await decode_jwt(old_refresh_token)
     old_refresh_jti = old_payload.get("jti")
 
     old_access_jti = await _get_active(user_id, "access")
@@ -146,9 +163,9 @@ async def rotate_tokens(user_id: int, old_refresh_token: str) -> Dict[str, Any]:
     await _add_to_blacklist(user_id, old_access_jti, old_refresh_jti)
 
     # 签发新的一对并登记
-    tokens = create_tokens(user_id)
-    access_jti = jwt.decode(tokens["access_token"], JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])["jti"]
-    refresh_jti = jwt.decode(tokens["refresh_token"], JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])["jti"]
+    tokens = await create_tokens(user_id)
+    access_jti = (await decode_jwt(tokens["access_token"]))["jti"]
+    refresh_jti = (await decode_jwt(tokens["refresh_token"]))["jti"]
     await _set_active(user_id, "access", access_jti)
     await _set_active(user_id, "refresh", refresh_jti)
     return tokens
@@ -179,9 +196,9 @@ async def revoke_user_tokens(user_id: int) -> None:
 
 # ── 校验 ──────────────────────────────────────────────────────────────
 
-def decode_token(token: str) -> Dict[str, Any]:
+async def decode_token(token: str) -> Dict[str, Any]:
     try:
-        return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        return await decode_jwt(token)
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.PyJWTError:
@@ -228,7 +245,7 @@ async def get_current_user(
     parts = authorization.split(" ")
     token = parts[1] if len(parts) > 1 else parts[0]
 
-    payload = decode_token(token)
+    payload = await decode_token(token)
 
     if payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="Invalid token type, please use access token")
@@ -246,7 +263,7 @@ async def get_current_user(
 async def verify_refresh_token(token: str, db: AsyncSession) -> Any:
     from crud.user import get_user_by_id
 
-    payload = decode_token(token)
+    payload = await decode_token(token)
 
     if payload.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="Invalid token type, please use refresh token")
