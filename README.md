@@ -690,3 +690,77 @@ PYTHONPATH=. uv run python -m alembic downgrade -1
 
 **autogenerate 的结果必须人工过一遍**，它在本项目有两个已成事实的偏差：会按 ORM 声明生成 `ForeignKeyConstraint`（项目硬性禁止 DB 级外键，见 `AGENTS.md`），且会把 `is_deleted` 建成 `Integer`（`782f2e8edc1b` → 后来由 `b7e1a2c3d4f5` 改回 `Boolean`）。`d3a9f6c1b842_add_menu_table.py` 是手写的，可作为新增表的模板：不写 `ForeignKeyConstraint`、不写 `server_default`（时间戳与布尔默认都留在 Python 侧）。
 
+### 生产风格迁移流程（手写迁移，推荐用于生产发布）
+
+autogenerate 只适合开发环境快速迭代。生产发布的标准做法是**手写迁移脚本 → 生成 SQL 人工审核 → 在目标环境执行**，每一步变更都明确、可 review、可回滚：
+
+**Step 1：修改模型**（`models/<module>.py`），确认新模型已在 `models/__init__.py` 导出。
+
+**Step 2：确认当前迁移 head**（只查看，不连库）：
+
+```bash
+PYTHONPATH=. uv run python -m alembic heads
+```
+
+新迁移的 `down_revision` 必须接到这个 head 上。
+
+**Step 3：手写迁移文件**。新建 `alembic/versions/<revision_id>_<描述>.py`，以给 `article` 加 `tags` 列为例：
+
+```python
+from typing import Sequence, Union
+from alembic import op
+import sqlalchemy as sa
+
+revision: str = 'a1b2c3d4e5f6'                      # 唯一即可
+down_revision: Union[str, Sequence[str], None] = 'd3a9f6c1b842'  # 上一步查到的 head
+branch_labels = None
+depends_on = None
+
+def upgrade() -> None:
+    # 可空 + 无默认值：MySQL 8 走 INSTANT DDL，不锁表，生产安全
+    op.add_column('article', sa.Column('tags', sa.String(255), nullable=True))
+
+def downgrade() -> None:
+    op.drop_column('article', 'tags')
+```
+
+**Step 4：验证迁移链**：
+
+```bash
+PYTHONPATH=. uv run python -m alembic heads
+```
+
+应显示新 revision 为 `(head)`；若报 `Can't locate revision` 说明 `down_revision` 写错。
+
+**Step 5：离线生成 SQL 预览**（不连库，生产上给 DBA 审核的一步）：
+
+```bash
+PYTHONPATH=. uv run python -m alembic upgrade <旧head>:<新revision> --sql
+```
+
+**Step 6：应用到数据库**：
+
+```bash
+PYTHONPATH=. uv run python -m alembic upgrade head
+```
+
+**Step 7：验证结果**：
+
+```bash
+PYTHONPATH=. uv run python -m alembic current   # 应输出新 revision (head)
+```
+
+**Step 8（可选）：演练回滚**：
+
+```bash
+PYTHONPATH=. uv run python -m alembic downgrade -1   # 撤销本次变更
+PYTHONPATH=. uv run python -m alembic upgrade head   # 再应用回来
+```
+
+**生产迁移原则：**
+
+- **迁移文件一旦合并进主干，永不修改、永不删除**——删除会导致数据库 `alembic_version` 指向不存在的 revision（版本漂移），届时 `upgrade`/`downgrade`/`stamp` 全部报 `Can't locate revision`，只能手工 UPDATE `alembic_version` 修复
+- 大表加列用「可空 + 无默认值」（MySQL 8 INSTANT DDL 不锁表）；需要默认值时分三步上线：先加可空列 → 回填数据 → 再收紧约束，每步可独立回滚
+- 生产执行前先在预发环境跑一遍，并用 `--sql` 预览实际 DDL
+- 回滚预案就是 `downgrade()`，必须与 `upgrade()` 成对认真写
+
